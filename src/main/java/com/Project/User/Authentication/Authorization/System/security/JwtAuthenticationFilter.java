@@ -31,7 +31,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext().getAuthentication() == null) {
             UserDetails userDetails =
                     userDetailsService.loadUserByUsername(username);
-            if (jwtService.isTokenValid(token)) {
+            if (!userDetails.isEnabled()) {
+                throw new RuntimeException("User disabled");
+            }
+            if (jwtService.isTokenValid(token, userDetails)) {
                 UsernamePasswordAuthenticationToken authToken =
                         new UsernamePasswordAuthenticationToken(
                                 userDetails,

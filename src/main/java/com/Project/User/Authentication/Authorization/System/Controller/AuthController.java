@@ -42,32 +42,7 @@ public class AuthController {
     public ResponseEntity<AuthResponse> refreshToken(
             @RequestParam String refreshToken,
             HttpServletRequest request) {
-
-        RefreshToken token = refreshTokenRepository.findAll()
-                .stream()
-                .filter(stored ->
-                        passwordEncoder.matches(refreshToken, stored.getToken()))
-                .findFirst()
-                .orElseThrow(() -> new RuntimeException("Invalid refresh token"));
-        refreshTokenService.verifyExpiration(token);
-        String currentDevice = request.getHeader("User-Agent");
-        String currentIp = request.getRemoteAddr();
-        if (!token.getDeviceInfo().equals(currentDevice) ||
-                !token.getIpAddress().equals(currentIp)) {
-            throw new RuntimeException("Suspicious refresh attempt detected");
-        }
-        String newRawRefreshToken =
-                refreshTokenService.rotateRefreshToken(
-                        token,
-                        currentDevice,
-                        currentIp
-                );
-        String newAccessToken =
-                jwtService.generateToken(
-                        token.getUser().getUsername()
-                );
-        return ResponseEntity.ok(
-                new AuthResponse(newAccessToken, newRawRefreshToken));
+        return ResponseEntity.ok(authService.refreshToken(refreshToken, request));
     }
     @PostMapping("/logout")
     public ResponseEntity<?> logout(@RequestParam String refreshToken) {
