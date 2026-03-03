@@ -47,7 +47,6 @@ public class AuthService {
         userRepository.save(user);
     }
     public AuthResponse login(LoginRequest request, HttpServletRequest httpRequest) {
-
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         request.getUsername(),
@@ -59,7 +58,7 @@ public class AuthService {
         String deviceInfo = httpRequest.getHeader("User-Agent");
         String ipAddress = httpRequest.getRemoteAddr();
         String accessToken = jwtService.generateToken(user.getUsername());
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user,deviceInfo,ipAddress);
-        return new AuthResponse(accessToken, refreshToken.getToken());
+        String rawRefreshToken = refreshTokenService.createRefreshToken(user,deviceInfo,ipAddress);
+        return new AuthResponse(accessToken,rawRefreshToken);
     }
 }

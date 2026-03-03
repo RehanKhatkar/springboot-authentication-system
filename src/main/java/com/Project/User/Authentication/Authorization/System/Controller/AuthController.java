@@ -12,6 +12,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -24,6 +25,7 @@ public class AuthController {
     private final RefreshTokenRepository refreshTokenRepository;
     private final RefreshTokenService refreshTokenService;
     private final JwtService jwtService;
+    private final PasswordEncoder passwordEncoder;
     @PostMapping("/register")
     public ResponseEntity<String> register(
             @Valid @RequestBody RegisterRequest request) {
@@ -40,7 +42,13 @@ public class AuthController {
     public ResponseEntity<AuthResponse> refreshToken(
             @RequestParam String refreshToken,
             HttpServletRequest request) {
-        RefreshToken token = refreshTokenRepository.findByToken(refreshToken).orElseThrow(() -> new RuntimeException("Invalid refresh token"));
+
+        RefreshToken token = refreshTokenRepository.findAll()
+                .stream()
+                .filter(stored ->
+                        passwordEncoder.matches(refreshToken, stored.getToken()))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Invalid refresh token"));
         refreshTokenService.verifyExpiration(token);
         String currentDevice = request.getHeader("User-Agent");
         String currentIp = request.getRemoteAddr();
@@ -48,12 +56,18 @@ public class AuthController {
                 !token.getIpAddress().equals(currentIp)) {
             throw new RuntimeException("Suspicious refresh attempt detected");
         }
-        RefreshToken newRefreshToken = refreshTokenService.rotateRefreshToken(token);
+        String newRawRefreshToken =
+                refreshTokenService.rotateRefreshToken(
+                        token,
+                        currentDevice,
+                        currentIp
+                );
         String newAccessToken =
                 jwtService.generateToken(
-                        newRefreshToken.getUser().getUsername()
+                        token.getUser().getUsername()
                 );
-        return ResponseEntity.ok(new AuthResponse(newAccessToken,newRefreshToken.getToken()));
+        return ResponseEntity.ok(
+                new AuthResponse(newAccessToken, newRawRefreshToken));
     }
     @PostMapping("/logout")
     public ResponseEntity<?> logout(@RequestParam String refreshToken) {
