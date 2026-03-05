@@ -12,7 +12,9 @@ import com.Project.User.Authentication.Authorization.System.dto.RegisterRequest;
 import com.Project.User.Authentication.Authorization.System.security.JwtService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -22,7 +24,7 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -33,6 +35,8 @@ public class AuthService {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final RefreshTokenRepository refreshTokenRepository;
+    private static final int MAX_FAILED_ATTEMPTS = 5;
+    private static final long LOCK_TIME_DURATION = 15;
     public void register(RegisterRequest request){
         if(userRepository.findByUsername(request.getUsername()).isPresent()){
             throw new RuntimeException("Username already exists");
@@ -46,18 +50,38 @@ public class AuthService {
                 .roles(Set.of(userRole))
                 .enabled(true)
                 .createdAt(LocalDateTime.now())
+                .failedAttempts(0)
+                .locked(false)
                 .build();
         userRepository.save(user);
     }
     public AuthResponse login(LoginRequest request, HttpServletRequest httpRequest) {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        request.getUsername(),
-                        request.getPassword()
-                )
-        );
-        User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow();
+        User user = userRepository.findByUsername(request.getUsername()).orElseThrow();
+        if (user.isLocked()) {
+            if (!unlockWhenTimeExpired(user)) {
+                throw new RuntimeException("Account locked. Try again later.");
+            }
+        }
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            request.getUsername(),
+                            request.getPassword()
+                    )
+            );
+        } catch (BadCredentialsException ex) {
+            log.warn("Failed login attempt for user: {}", request.getUsername());
+            increaseFailedAttempts(user);
+            if (user.getFailedAttempts() >= MAX_FAILED_ATTEMPTS) {
+                lock(user);
+                log.warn("User account locked due to multiple failed attempts: {}", user.getUsername());
+            }
+            throw new RuntimeException("Invalid username or password");
+        }
+        if (user.getFailedAttempts() > 0) {
+            user.setFailedAttempts(0);
+            userRepository.save(user);
+        }
         String deviceInfo = httpRequest.getHeader("User-Agent");
         String ipAddress = httpRequest.getRemoteAddr();
         String accessToken = jwtService.generateToken(user.getUsername());
@@ -89,5 +113,31 @@ public class AuthService {
                         token.getUser().getUsername()
                 );
         return new AuthResponse(newAccessToken, newRawRefreshToken);
+    }
+    private void increaseFailedAttempts(User user) {
+        user.setFailedAttempts(user.getFailedAttempts() + 1);
+        userRepository.save(user);
+    }
+    private void lock(User user) {
+        user.setLocked(true);
+        user.setLockedAt(LocalDateTime.now());
+        userRepository.save(user);
+    }
+    private void unlock(User user) {
+        user.setLocked(false);
+        user.setFailedAttempts(0);
+        user.setLockedAt(null);
+        userRepository.save(user);
+    }
+    private boolean unlockWhenTimeExpired(User user) {
+        if (user.getLockedAt() == null){
+            return false;
+        }
+        LocalDateTime unlockTime = user.getLockedAt().plusMinutes(LOCK_TIME_DURATION);
+        if (LocalDateTime.now().isAfter(unlockTime)) {
+            unlock(user);
+            return true;
+        }
+        return false;
     }
 }

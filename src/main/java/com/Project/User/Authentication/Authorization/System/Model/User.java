@@ -32,4 +32,7 @@ public class User {
             inverseJoinColumns = @JoinColumn(name = "role_id")
     )
     private Set<Role> roles = new HashSet<>();
+    private int failedAttempts;
+    private boolean locked;
+    private LocalDateTime lockedAt;
 }
