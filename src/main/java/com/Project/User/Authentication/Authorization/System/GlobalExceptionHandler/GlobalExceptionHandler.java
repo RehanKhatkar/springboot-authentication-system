@@ -16,15 +16,22 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleRuntimeException(
             RuntimeException ex,
             HttpServletRequest request) {
-
+        if (ex.getMessage().contains("Too many login attempts")) {
+            ErrorResponse error = new ErrorResponse(
+                    LocalDateTime.now(),
+                    429,
+                    ex.getMessage(),
+                    request.getRequestURI()
+            );
+            return ResponseEntity.status(429).body(error);
+        }
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
-                HttpStatus.BAD_REQUEST.value(),
+                400,
                 ex.getMessage(),
                 request.getRequestURI()
         );
-
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
+        return ResponseEntity.badRequest().body(error);
     }
 
     // Handle generic exceptions

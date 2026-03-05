@@ -10,6 +10,7 @@ import com.Project.User.Authentication.Authorization.System.dto.AuthResponse;
 import com.Project.User.Authentication.Authorization.System.dto.LoginRequest;
 import com.Project.User.Authentication.Authorization.System.dto.RegisterRequest;
 import com.Project.User.Authentication.Authorization.System.security.JwtService;
+import io.github.bucket4j.Bucket;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +36,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final RateLimitService rateLimitService;
     private static final int MAX_FAILED_ATTEMPTS = 5;
     private static final long LOCK_TIME_DURATION = 15;
     public void register(RegisterRequest request){
@@ -56,6 +58,11 @@ public class AuthService {
         userRepository.save(user);
     }
     public AuthResponse login(LoginRequest request, HttpServletRequest httpRequest) {
+        String ipAddress = httpRequest.getRemoteAddr();
+        Bucket bucket = rateLimitService.resolveBucket(ipAddress);
+        if (!bucket.tryConsume(1)) {
+            throw new RuntimeException("Too many login attempts. Try again later.");
+        }
         User user = userRepository.findByUsername(request.getUsername()).orElseThrow();
         if (user.isLocked()) {
             if (!unlockWhenTimeExpired(user)) {
@@ -83,7 +90,6 @@ public class AuthService {
             userRepository.save(user);
         }
         String deviceInfo = httpRequest.getHeader("User-Agent");
-        String ipAddress = httpRequest.getRemoteAddr();
         String accessToken = jwtService.generateToken(user.getUsername());
         String rawRefreshToken = refreshTokenService.createRefreshToken(user,deviceInfo,ipAddress);
         return new AuthResponse(accessToken,rawRefreshToken);
