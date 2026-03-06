@@ -76,8 +76,12 @@ public class AuthService {
                             request.getPassword()
                     )
             );
+            log.info("LOGIN_SUCCESS username={} ip={} device={}",
+                    user.getUsername(),
+                    httpRequest.getRemoteAddr(),
+                    httpRequest.getHeader("User-Agent"));
         } catch (BadCredentialsException ex) {
-            log.warn("Failed login attempt for user: {}", request.getUsername());
+            log.warn("LOGIN_FAILED username={} ip={}", request.getUsername(), httpRequest.getRemoteAddr());
             increaseFailedAttempts(user);
             if (user.getFailedAttempts() >= MAX_FAILED_ATTEMPTS) {
                 lock(user);
@@ -104,8 +108,11 @@ public class AuthService {
         refreshTokenService.verifyExpiration(token);
         String currentDevice = request.getHeader("User-Agent");
         String currentIp = request.getRemoteAddr();
-        if (!token.getDeviceInfo().equals(currentDevice) ||
-                !token.getIpAddress().equals(currentIp)) {
+        if (!token.getDeviceInfo().equals(currentDevice) || !token.getIpAddress().equals(currentIp)) {
+            log.warn("SUSPICIOUS_REFRESH username={} ip={} device={}",
+                    token.getUser().getUsername(),
+                    currentIp,
+                    currentDevice);
             throw new RuntimeException("Suspicious refresh attempt detected");
         }
         String newRawRefreshToken =
