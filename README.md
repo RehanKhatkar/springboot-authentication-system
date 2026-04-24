@@ -46,9 +46,9 @@ src
 
 ### Using Docker (recommended)
 
-</>bash
+```bash
 docker compose up --build
-
+```
 ---
 
 
@@ -96,7 +96,7 @@ Author:-Rehan Khatkar
 ---
 ## System Architecture
 
-</>mermaid
+```mermaid
 graph TD
 
 Client[Postman / Frontend] --> API[Spring Boot API]
@@ -110,11 +110,11 @@ Service --> DB[(PostgreSQL Database)]
 DB --> Roles[Roles Table]
 DB --> Users[Users Table]
 DB --> Tokens[Refresh Tokens]
-
+```
 ---
 ## JWT Token Lifecycle
 
-</> mermaid
+``` mermaid
 sequenceDiagram
 
 Client->>API: Login (username + password)
@@ -134,6 +134,7 @@ Client->>API: Send Refresh Token
 API->>DB: Validate refresh token
 
 API->>Client: New Access Token
+```
 ---
 
 ## Security Design
